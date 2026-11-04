@@ -1,0 +1,40 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: vitalstream
+      POSTGRES_USER: vitalstream
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U vitalstream"]
+      interval: 5s
+      retries: 10
+    volumes:
+      - postgres:/var/lib/postgresql/data
+  api:
+    build: .
+    ports: ["127.0.0.1:8000:8000"]
+    environment:
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql+psycopg://vitalstream:${POSTGRES_PASSWORD}@db/vitalstream
+      OIDC_ISSUER_URL: http://10.0.2.2:8080/realms/vitalstream
+      OIDC_JWKS_URL: http://keycloak:8080/realms/vitalstream/protocol/openid-connect/certs
+      OIDC_AUDIENCE: vitalstream-api
+      ALLOW_SYNTHETIC: "true"
+    depends_on:
+      db:
+        condition: service_healthy
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4.2
+    command: [start-dev, --import-realm]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Set KEYCLOAK_ADMIN_PASSWORD in .env}
+      KC_HOSTNAME: http://10.0.2.2:8080
+    ports: ["127.0.0.1:8080:8080"]
+    volumes:
+      - ./infra/keycloak/realm.json:/opt/keycloak/data/import/realm.json:ro
+      - keycloak:/opt/keycloak/data
+volumes:
+  postgres:
+  keycloak:
